@@ -31,6 +31,8 @@ jbe west_greater
 jmp n_check
 w_check:
 mov current_cars, ebx
+jmp greater_selected
+
 n_check:
 mov current_cars, eax
 jmp greater_selected
@@ -116,7 +118,7 @@ push eax
 
 Call carsdec
 
-mov eax, 500
+mov eax, 1000
 Call Delay
 Jmp MainLoop
 
@@ -124,6 +126,7 @@ exit
 MAIN ENDP
 
 carsdec PROC
+
 push ebp
 mov ebp, esp
 push eax
