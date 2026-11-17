@@ -1,0 +1,1044 @@
+include Irvine32.inc
+
+.data
+;Indicators for active states for each traffic light
+NORTH_GREEN EQU 00000001b
+NORTH_YELLOW EQU 00000010b
+EAST_GREEN EQU 00000100b
+EAST_YELLOW EQU 00001000b
+SOUTH_GREEN EQU 00010000b
+SOUTH_YELLOW EQU 00100000b
+WEST_GREEN EQU 01000000b
+WEST_YELLOW EQU 10000000b
+
+BASE_GREEN_TIME EQU 10 ; Minimum Time for green light
+MAX_GREEN_TIME EQU 120 ; Maximum Time for green light
+BASE_YELLOW_TIME EQU 3 ; Time for yellow light
+SINGLE_CAR_TIME EQU 2 ; Time for single car to pass
+
+CLR_RED   EQU 12
+CLR_GRN   EQU 10
+CLR_YEL   EQU 14
+CLR_WHT   EQU 15
+CLR_GRY   EQU 7
+CLR_TITLE EQU 1Fh
+
+state_arr BYTE NORTH_GREEN, NORTH_YELLOW,
+			   EAST_GREEN, EAST_YELLOW,
+			   SOUTH_GREEN, SOUTH_YELLOW,
+			   WEST_GREEN, WEST_YELLOW
+
+lights_state BYTE 0 ; Curent state of traffic lights
+current_phase BYTE 0 ; Current phase in finite-state machine(fsm)
+phase_timer DWORD (BASE_GREEN_TIME + MAX_GREEN_TIME) /2 ; Timer for current active traffic light
+
+; Number of cars waiting in each direction
+north_queue DWORD 0
+east_queue DWORD 0
+south_queue DWORD 0
+west_queue DWORD 0
+
+; Variables to keep track of key metrics to be saved to file
+manual_inputs DWORD 0
+total_north_cars DWORD 0
+total_east_cars DWORD 0
+total_south_cars DWORD 0
+total_west_cars DWORD 0
+max_queue DWORD 0
+max_north_queue DWORD 0
+max_east_queue DWORD 0
+max_south_queue DWORD 0
+max_west_queue DWORD 0
+time_max_queue DWORD 0
+time_max_north_queue DWORD 0
+time_max_east_queue DWORD 0
+time_max_south_queue DWORD 0
+time_max_west_queue DWORD 0
+
+ticks         DWORD 0
+poll          DWORD 0
+input_mode    BYTE 0
+north_departs DWORD 0
+east_departs  DWORD 0
+south_departs DWORD 0
+west_departs  DWORD 0
+
+log_buf       BYTE 8 DUP(0FFh)
+last_logged   BYTE 0FFh
+phase_elapsed DWORD 0
+sig_manual    BYTE 0
+advance_req   BYTE 0
+
+phase_names BYTE "North Green  ",0
+            BYTE "North Yellow ",0
+            BYTE "East Green   ",0
+            BYTE "East Yellow  ",0
+            BYTE "South Green  ",0
+            BYTE "South Yellow ",0
+            BYTE "West Green   ",0
+            BYTE "West Yellow  ",0
+
+lane_names  BYTE "North_Queue  ",0
+            BYTE "East_Queue   ",0
+            BYTE "South_Queue  ",0
+            BYTE "West_Queue   ",0
+
+titleStr  BYTE 17 DUP(' '),"[ ** SMART TRAFFIC GRID SIMULATION v1.0 ** ]",18 DUP(' '),0
+sepStr    BYTE 79 DUP('-'),0
+timeLbl   BYTE "System Time: ",0
+ticksLbl  BYTE " (Ticks: ",0
+phaseLbl  BYTE ")  |  Active Phase: ",0
+
+hdrN BYTE "[ NORTH LANE ]",0
+hdrE BYTE "[ EAST LANE ] ",0
+hdrS BYTE "[ SOUTH LANE ]",0
+hdrW BYTE "[ WEST LANE ] ",0
+
+lightsLbl BYTE "Lights: ",0
+grnTxt    BYTE "** GREEN ** (Go!)   ",0
+yelTxt    BYTE "** YELLOW ** (Slow) ",0
+redTxt    BYTE "** RED ** (Wait)    ",0
+queueLbl  BYTE "Queue: ",0
+vehLbl    BYTE " Vehicles (0x",0
+departLbl BYTE "Departures: ",0
+
+bulbStr   BYTE "(O)",0
+
+roadV BYTE "       |  :  |       ",0
+roadW BYTE "-------+     +-------",0
+roadS BYTE 21 DUP(' '),0
+roadC BYTE "- - - -       - - - -",0
+
+pmHdr     BYTE "[ PHASE MANAGER ]",0
+nowLbl    BYTE "Now:  ",0
+timerLbl  BYTE "Timer: ",0
+nextLbl   BYTE "Next: ",0
+secStr    BYTE "s  ",0
+sig_names  BYTE "Signal: ADAPTIVE   ",0
+           BYTE "Signal: MANUAL     ",0
+
+mode_names BYTE "Input: AUTO+MANUAL",0
+           BYTE "Input: AUTO only  ",0
+           BYTE "Input: MANUAL only",0
+logHdr    BYTE "[ VEHICLE LOG ]",0
+recentLbl BYTE "Recent: ",0
+blankLog  BYTE 21 DUP(' '),0
+
+barStr    BYTE " F1:Veh F2:Sig Spc:Next NESW:Add Esc:Exit Log:TRAFFIC.LOG ESI:",0
+barTail   BYTE 4 DUP(' '),0
+
+logName    BYTE "TRAFFIC.LOG",0
+log_handle DWORD 0
+log_ok     BYTE 0
+line_buf   BYTE 160 DUP(0)
+
+txtHead   BYTE "SMART TRAFFIC GRID SIMULATION LOG",0
+txtT      BYTE "T=",0
+txtPh     BYTE " PHASE=",0
+txtN      BYTE " N=",0
+txtE      BYTE " E=",0
+txtS      BYTE " S=",0
+txtW      BYTE " W=",0
+txtSum    BYTE "SUMMARY:",0
+txtManual BYTE " manual_inputs=",0
+txtTicks  BYTE " ticks=",0
+txtPeak   BYTE " peak_total_queue=",0
+txtTot    BYTE " total_cars=",0
+txtMax    BYTE " max_queue=",0
+txtAt     BYTE " at_T=",0
+nameN     BYTE "NORTH",0
+nameE     BYTE "EAST",0
+nameS     BYTE "SOUTH",0
+nameW     BYTE "WEST",0
+
+.code
+
+adaptiveTimer PROC USES eax edx
+MOV eax, [esi]
+PUSH SINGLE_CAR_TIME
+MUL DWORD PTR [esp]
+ADD esp, 4
+ADD eax, BASE_GREEN_TIME
+CMP eax, MAX_GREEN_TIME
+JNA _out
+MOV eax, MAX_GREEN_TIME
+
+_out:
+	MOV ecx, eax
+	RET
+adaptiveTimer ENDP
+
+updateFSM PROC USES eax ebx ecx edi
+MOV ecx, phase_timer
+DEC ecx
+TEST ecx, 0FFFFFFFFh
+JNZ _out
+
+MOVZX eax, current_phase
+INC eax
+CMP eax, 7
+JNA _notReset
+XOR eax, eax
+
+_notReset:
+ 	LEA edi, [state_arr + eax * TYPE state_arr]
+	MOV bl, [edi]
+	MOV lights_state, bl
+	TEST eax, 1
+	JZ _greenLight
+	MOV ecx, BASE_YELLOW_TIME
+	JMP _setPhase
+
+_greenLight:
+	TEST eax, 0FFFFFFFFh
+	JZ _north
+	CMP eax, 2
+	JE _east
+	CMP eax, 4
+	JE _south
+	MOV esi, OFFSET west_queue
+	JMP _setTimer
+
+_north:
+	MOV esi, OFFSET north_queue
+	JMP _setTimer
+_east:
+	MOV esi, OFFSET east_queue
+	JMP _setTimer
+_south:
+	MOV esi, OFFSET south_queue
+_setTimer:
+	CALL adaptiveTimer
+_setPhase:
+	MOV current_phase, al
+
+_out:
+	MOV phase_timer, ecx
+	RET
+updateFSM ENDP
+
+generateInput PROC USES eax
+MOV eax, 4
+CALL RandomRange
+ADD north_queue, eax
+MOV eax, 4
+CALL RandomRange
+ADD east_queue, eax
+MOV eax, 4
+CALL RandomRange
+ADD south_queue, eax
+MOV eax, 4
+CALL RandomRange
+ADD west_queue, eax
+RET
+generateInput ENDP
+
+PrintPad2 PROC USES eax ebx edx
+    CMP eax, 99
+    JBE _ok
+    MOV eax, 99
+_ok:
+    XOR edx, edx
+    MOV ebx, 10
+    DIV ebx
+    ADD al, '0'
+    PUSH edx
+    CALL WriteChar
+    POP eax
+    ADD al, '0'
+    CALL WriteChar
+    RET
+PrintPad2 ENDP
+
+PrintPad3 PROC USES eax ebx edx
+    CMP eax, 999
+    JBE _ok
+    MOV eax, 999
+_ok:
+    XOR edx, edx
+    MOV ebx, 100
+    DIV ebx
+    ADD al, '0'
+    PUSH edx
+    CALL WriteChar
+    POP eax
+    CALL PrintPad2
+    RET
+PrintPad3 ENDP
+
+PrintPhaseName PROC USES eax edx
+    AND eax, 7
+    IMUL eax, eax, 14
+    LEA edx, [phase_names + eax]
+    CALL WriteString
+    RET
+PrintPhaseName ENDP
+
+SetPhaseColour PROC USES eax ebx
+    MOV ebx, CLR_GRN
+    TEST al, 1
+    JZ _c
+    MOV ebx, CLR_YEL
+_c:
+    MOV eax, ebx
+    CALL SetTextColor
+    RET
+SetPhaseColour ENDP
+
+GetLightInfo PROC
+    MOV al, lights_state
+    TEST al, bl
+    JNZ _g
+    TEST al, bh
+    JNZ _y
+    MOV eax, CLR_RED
+    MOV edx, OFFSET redTxt
+    RET
+_y:
+    MOV eax, CLR_YEL
+    MOV edx, OFFSET yelTxt
+    RET
+_g:
+    MOV eax, CLR_GRN
+    MOV edx, OFFSET grnTxt
+    RET
+GetLightInfo ENDP
+
+DrawLane PROC USES eax ebx edx esi, yPos:DWORD, hdr:PTR BYTE, masks:DWORD, qPtr:PTR DWORD, dPtr:PTR DWORD
+    MOV dl, 1
+    MOV dh, BYTE PTR yPos
+    CALL Gotoxy
+    MOV eax, CLR_YEL
+    CALL SetTextColor
+    MOV edx, hdr
+    CALL WriteString
+
+    MOV dl, 1
+    MOV dh, BYTE PTR yPos
+    INC dh
+    CALL Gotoxy
+    MOV eax, CLR_WHT
+    CALL SetTextColor
+    MOV edx, OFFSET lightsLbl
+    CALL WriteString
+    MOV ebx, masks
+    CALL GetLightInfo
+    CALL SetTextColor
+    CALL WriteString
+
+    MOV dl, 1
+    MOV dh, BYTE PTR yPos
+    ADD dh, 2
+    CALL Gotoxy
+    MOV eax, CLR_WHT
+    CALL SetTextColor
+    MOV edx, OFFSET queueLbl
+    CALL WriteString
+    MOV esi, qPtr
+    MOV eax, [esi]
+    CALL PrintPad3
+    MOV edx, OFFSET vehLbl
+    CALL WriteString
+    MOV eax, qPtr
+    CALL WriteHex
+    MOV al, ')'
+    CALL WriteChar
+
+    MOV dl, 1
+    MOV dh, BYTE PTR yPos
+    ADD dh, 3
+    CALL Gotoxy
+    MOV edx, OFFSET departLbl
+    CALL WriteString
+    MOV esi, dPtr
+    MOV eax, [esi]
+    CALL PrintPad3
+    RET
+DrawLane ENDP
+
+DrawLight PROC USES eax ebx edx, x:DWORD, y:DWORD, masks:DWORD, lx:DWORD, ly:DWORD, lbl:DWORD
+    MOV ebx, masks
+    CALL GetLightInfo
+    CALL SetTextColor
+    MOV dl, BYTE PTR x
+    MOV dh, BYTE PTR y
+    CALL Gotoxy
+    MOV edx, OFFSET bulbStr
+    CALL WriteString
+    MOV eax, CLR_WHT
+    CALL SetTextColor
+    MOV dl, BYTE PTR lx
+    MOV dh, BYTE PTR ly
+    CALL Gotoxy
+    MOV eax, lbl
+    CALL WriteChar
+    RET
+DrawLight ENDP
+
+DrawIntersection PROC USES eax ecx edx
+    MOV eax, CLR_GRY
+    CALL SetTextColor
+    XOR ecx, ecx
+_row:
+    MOV dl, 37
+    MOV dh, cl
+    ADD dh, 3
+    CALL Gotoxy
+    MOV edx, OFFSET roadV
+    CMP ecx, 7
+    JB _print
+    CMP ecx, 11
+    JA _print
+    MOV edx, OFFSET roadW
+    CMP ecx, 7
+    JE _print
+    CMP ecx, 11
+    JE _print
+    MOV edx, OFFSET roadS
+    CMP ecx, 9
+    JNE _print
+    MOV edx, OFFSET roadC
+_print:
+    CALL WriteString
+    INC ecx
+    CMP ecx, 19
+    JB _row
+    RET
+DrawIntersection ENDP
+
+AppendStr PROC USES eax esi
+_c:
+    MOV al, [esi]
+    TEST al, al
+    JZ _d
+    MOV [edi], al
+    INC esi
+    INC edi
+    JMP _c
+_d:
+    RET
+AppendStr ENDP
+
+AppendNum PROC USES eax ebx ecx edx
+    MOV ebx, 10
+    XOR ecx, ecx
+_div:
+    XOR edx, edx
+    DIV ebx
+    PUSH edx
+    INC ecx
+    TEST eax, eax
+    JNZ _div
+_pop:
+    POP eax
+    ADD al, '0'
+    MOV [edi], al
+    INC edi
+    LOOP _pop
+    RET
+AppendNum ENDP
+
+FlushLine PROC USES eax ecx edx
+    MOV BYTE PTR [edi], 0Dh
+    INC edi
+    MOV BYTE PTR [edi], 0Ah
+    INC edi
+    MOV ecx, edi
+    SUB ecx, OFFSET line_buf
+    MOV eax, log_handle
+    MOV edx, OFFSET line_buf
+    CALL WriteToFile
+    RET
+FlushLine ENDP
+
+openLog PROC USES eax edx esi edi
+    MOV edx, OFFSET logName
+    CALL CreateOutputFile
+    CMP eax, INVALID_HANDLE_VALUE
+    JE _fail
+    MOV log_handle, eax
+    MOV log_ok, 1
+    MOV edi, OFFSET line_buf
+    MOV esi, OFFSET txtHead
+    CALL AppendStr
+    CALL FlushLine
+_fail:
+    RET
+openLog ENDP
+
+fileLogPhase PROC USES eax esi edi
+    CMP log_ok, 0
+    JE _done
+    MOV edi, OFFSET line_buf
+    MOV esi, OFFSET txtT
+    CALL AppendStr
+    MOV eax, ticks
+    CALL AppendNum
+    MOV esi, OFFSET txtPh
+    CALL AppendStr
+    MOVZX eax, current_phase
+    IMUL eax, eax, 14
+    LEA esi, [phase_names + eax]
+    CALL AppendStr
+    MOV esi, OFFSET txtN
+    CALL AppendStr
+    MOV eax, north_queue
+    CALL AppendNum
+    MOV esi, OFFSET txtE
+    CALL AppendStr
+    MOV eax, east_queue
+    CALL AppendNum
+    MOV esi, OFFSET txtS
+    CALL AppendStr
+    MOV eax, south_queue
+    CALL AppendNum
+    MOV esi, OFFSET txtW
+    CALL AppendStr
+    MOV eax, west_queue
+    CALL AppendNum
+    CALL FlushLine
+_done:
+    RET
+fileLogPhase ENDP
+
+updateMetrics PROC USES eax ebx
+    MOV ebx, ticks
+
+    MOV eax, north_queue
+    CMP eax, max_north_queue
+    JBE _e
+    MOV max_north_queue, eax
+    MOV time_max_north_queue, ebx
+_e:
+    MOV eax, east_queue
+    CMP eax, max_east_queue
+    JBE _s
+    MOV max_east_queue, eax
+    MOV time_max_east_queue, ebx
+_s:
+    MOV eax, south_queue
+    CMP eax, max_south_queue
+    JBE _w
+    MOV max_south_queue, eax
+    MOV time_max_south_queue, ebx
+_w:
+    MOV eax, west_queue
+    CMP eax, max_west_queue
+    JBE _all
+    MOV max_west_queue, eax
+    MOV time_max_west_queue, ebx
+_all:
+    MOV eax, north_queue
+    ADD eax, east_queue
+    ADD eax, south_queue
+    ADD eax, west_queue
+    CMP eax, max_queue
+    JBE _done
+    MOV max_queue, eax
+    MOV time_max_queue, ebx
+_done:
+    RET
+updateMetrics ENDP
+
+LaneSummary PROC USES eax esi edi, nameP:PTR BYTE, depP:PTR DWORD, qP:PTR DWORD, maxP:PTR DWORD, timeP:PTR DWORD, totP:PTR DWORD
+    MOV esi, depP
+    MOV eax, [esi]
+    MOV esi, qP
+    ADD eax, [esi]
+    MOV esi, totP
+    MOV [esi], eax
+    MOV edi, OFFSET line_buf
+    MOV esi, nameP
+    CALL AppendStr
+    MOV esi, OFFSET txtTot
+    CALL AppendStr
+    CALL AppendNum
+    MOV esi, OFFSET txtMax
+    CALL AppendStr
+    MOV esi, maxP
+    MOV eax, [esi]
+    CALL AppendNum
+    MOV esi, OFFSET txtAt
+    CALL AppendStr
+    MOV esi, timeP
+    MOV eax, [esi]
+    CALL AppendNum
+    CALL FlushLine
+    RET
+LaneSummary ENDP
+
+closeLog PROC USES eax esi edi
+    CMP log_ok, 0
+    JE _done
+    MOV edi, OFFSET line_buf
+    MOV esi, OFFSET txtSum
+    CALL AppendStr
+    MOV esi, OFFSET txtManual
+    CALL AppendStr
+    MOV eax, manual_inputs
+    CALL AppendNum
+    MOV esi, OFFSET txtTicks
+    CALL AppendStr
+    MOV eax, ticks
+    CALL AppendNum
+    MOV esi, OFFSET txtPeak
+    CALL AppendStr
+    MOV eax, max_queue
+    CALL AppendNum
+    MOV esi, OFFSET txtAt
+    CALL AppendStr
+    MOV eax, time_max_queue
+    CALL AppendNum
+    CALL FlushLine
+    INVOKE LaneSummary, ADDR nameN, ADDR north_departs, ADDR north_queue, ADDR max_north_queue, ADDR time_max_north_queue, ADDR total_north_cars
+    INVOKE LaneSummary, ADDR nameE, ADDR east_departs,  ADDR east_queue,  ADDR max_east_queue,  ADDR time_max_east_queue,  ADDR total_east_cars
+    INVOKE LaneSummary, ADDR nameS, ADDR south_departs, ADDR south_queue, ADDR max_south_queue, ADDR time_max_south_queue, ADDR total_south_cars
+    INVOKE LaneSummary, ADDR nameW, ADDR west_departs,  ADDR west_queue,  ADDR max_west_queue,  ADDR time_max_west_queue,  ADDR total_west_cars
+    MOV eax, log_handle
+    CALL CloseFile
+    MOV log_ok, 0
+_done:
+    RET
+closeLog ENDP
+
+adaptiveTick PROC USES eax ebx ecx edx
+    MOV al, lights_state
+    TEST al, NORTH_GREEN OR EAST_GREEN OR SOUTH_GREEN OR WEST_GREEN
+    JZ _done
+    MOV ecx, north_queue
+    TEST al, NORTH_GREEN
+    JNZ _got
+    MOV ecx, east_queue
+    TEST al, EAST_GREEN
+    JNZ _got
+    MOV ecx, south_queue
+    TEST al, SOUTH_GREEN
+    JNZ _got
+    MOV ecx, west_queue
+_got:
+    MOV eax, ecx
+    MOV ebx, SINGLE_CAR_TIME
+    MUL ebx
+    MOV ebx, MAX_GREEN_TIME
+    SUB ebx, phase_elapsed
+    JA _room
+    MOV eax, 1
+    JMP _set
+_room:
+    CMP eax, ebx
+    JBE _min
+    MOV eax, ebx
+_min:
+    MOV ebx, BASE_GREEN_TIME
+    SUB ebx, phase_elapsed
+    JBE _one
+    CMP eax, ebx
+    JAE _one
+    MOV eax, ebx
+_one:
+    TEST eax, eax
+    JNZ _set
+    MOV eax, 1
+_set:
+    MOV phase_timer, eax
+_done:
+    RET
+adaptiveTick ENDP
+
+logPhase PROC USES eax ecx
+    MOV al, current_phase
+    CMP al, last_logged
+    JE _done
+    MOV last_logged, al
+    MOV phase_elapsed, 0
+    MOV ecx, 7
+_shift:
+    MOV ah, [log_buf + ecx - 1]
+    MOV [log_buf + ecx], ah
+    LOOP _shift
+    MOV log_buf, al
+    CALL fileLogPhase
+_done:
+    RET
+logPhase ENDP
+
+processDepartures PROC USES eax
+    MOV al, lights_state
+    TEST al, NORTH_GREEN
+    JZ _e
+    CMP north_queue, 0
+    JE _e
+    DEC north_queue
+    INC north_departs
+_e:
+    TEST al, EAST_GREEN
+    JZ _s
+    CMP east_queue, 0
+    JE _s
+    DEC east_queue
+    INC east_departs
+_s:
+    TEST al, SOUTH_GREEN
+    JZ _w
+    CMP south_queue, 0
+    JE _w
+    DEC south_queue
+    INC south_departs
+_w:
+    TEST al, WEST_GREEN
+    JZ _done
+    CMP west_queue, 0
+    JE _done
+    DEC west_queue
+    INC west_departs
+_done:
+    RET
+processDepartures ENDP
+
+display PROC USES eax ebx ecx edx
+    MOV eax, CLR_TITLE
+    CALL SetTextColor
+    MOV dl, 0
+    MOV dh, 0
+    CALL Gotoxy
+    MOV edx, OFFSET titleStr
+    CALL WriteString
+
+    MOV eax, CLR_WHT
+    CALL SetTextColor
+    MOV dl, 1
+    MOV dh, 1
+    CALL Gotoxy
+    MOV edx, OFFSET timeLbl
+    CALL WriteString
+
+    MOV eax, ticks
+    XOR edx, edx
+    MOV ebx, 3600
+    DIV ebx
+    CALL PrintPad2
+    PUSH edx
+    MOV al, ':'
+    CALL WriteChar
+    POP edx
+    MOV eax, edx
+    XOR edx, edx
+    MOV ebx, 60
+    DIV ebx
+    CALL PrintPad2
+    PUSH edx
+    MOV al, ':'
+    CALL WriteChar
+    POP edx
+    MOV eax, edx
+    CALL PrintPad2
+
+    MOV edx, OFFSET ticksLbl
+    CALL WriteString
+    MOV eax, ticks
+    CALL WriteDec
+    MOV edx, OFFSET phaseLbl
+    CALL WriteString
+    MOVZX eax, current_phase
+    CALL SetPhaseColour
+    CALL PrintPhaseName
+
+    MOV eax, CLR_GRY
+    CALL SetTextColor
+    MOV dl, 0
+    MOV dh, 2
+    CALL Gotoxy
+    MOV edx, OFFSET sepStr
+    CALL WriteString
+    MOV dl, 0
+    MOV dh, 22
+    CALL Gotoxy
+    MOV edx, OFFSET sepStr
+    CALL WriteString
+
+    INVOKE DrawLane, 3,  ADDR hdrN, (NORTH_YELLOW SHL 8) OR NORTH_GREEN, ADDR north_queue, ADDR north_departs
+    INVOKE DrawLane, 8,  ADDR hdrE, (EAST_YELLOW  SHL 8) OR EAST_GREEN,  ADDR east_queue,  ADDR east_departs
+    INVOKE DrawLane, 13, ADDR hdrS, (SOUTH_YELLOW SHL 8) OR SOUTH_GREEN, ADDR south_queue, ADDR south_departs
+    INVOKE DrawLane, 18, ADDR hdrW, (WEST_YELLOW  SHL 8) OR WEST_GREEN,  ADDR west_queue,  ADDR west_departs
+
+    CALL DrawIntersection
+    INVOKE DrawLight, 46, 6,  (NORTH_YELLOW SHL 8) OR NORTH_GREEN, 47, 4,  'N'
+    INVOKE DrawLight, 53, 13, (EAST_YELLOW  SHL 8) OR EAST_GREEN,  57, 13, 'E'
+    INVOKE DrawLight, 46, 18, (SOUTH_YELLOW SHL 8) OR SOUTH_GREEN, 47, 20, 'S'
+    INVOKE DrawLight, 39, 11, (WEST_YELLOW  SHL 8) OR WEST_GREEN,  37, 11, 'W'
+
+    MOV eax, CLR_YEL
+    CALL SetTextColor
+    MOV dl, 59
+    MOV dh, 3
+    CALL Gotoxy
+    MOV edx, OFFSET pmHdr
+    CALL WriteString
+
+    MOV eax, CLR_WHT
+    CALL SetTextColor
+    MOV dl, 59
+    MOV dh, 4
+    CALL Gotoxy
+    MOV edx, OFFSET nowLbl
+    CALL WriteString
+    MOVZX eax, current_phase
+    CALL SetPhaseColour
+    CALL PrintPhaseName
+
+    MOV eax, CLR_WHT
+    CALL SetTextColor
+    MOV dl, 59
+    MOV dh, 5
+    CALL Gotoxy
+    MOV edx, OFFSET timerLbl
+    CALL WriteString
+    MOV eax, phase_timer
+    CALL PrintPad3
+    MOV edx, OFFSET secStr
+    CALL WriteString
+
+    MOV dl, 59
+    MOV dh, 6
+    CALL Gotoxy
+    MOV edx, OFFSET nextLbl
+    CALL WriteString
+    MOVZX eax, current_phase
+    INC eax
+    CALL PrintPhaseName
+
+    MOV dl, 59
+    MOV dh, 7
+    CALL Gotoxy
+    MOVZX eax, input_mode
+    IMUL eax, eax, 19
+    LEA edx, [mode_names + eax]
+    CALL WriteString
+
+    MOV dl, 59
+    MOV dh, 8
+    CALL Gotoxy
+    MOVZX eax, sig_manual
+    IMUL eax, eax, 19
+    LEA edx, [sig_names + eax]
+    CALL WriteString
+
+    MOV eax, CLR_YEL
+    CALL SetTextColor
+    MOV dl, 59
+    MOV dh, 9
+    CALL Gotoxy
+    MOV edx, OFFSET logHdr
+    CALL WriteString
+
+    XOR ecx, ecx
+_logLoop:
+    MOV dl, 59
+    MOV dh, cl
+    ADD dh, 10
+    CALL Gotoxy
+    MOVZX eax, BYTE PTR [log_buf + ecx]
+    CMP al, 0FFh
+    JE _blank
+    PUSH eax
+    MOV eax, CLR_WHT
+    CALL SetTextColor
+    MOV edx, OFFSET recentLbl
+    CALL WriteString
+    POP eax
+    CALL SetPhaseColour
+    CALL PrintPhaseName
+    JMP _nextLog
+_blank:
+    MOV edx, OFFSET blankLog
+    CALL WriteString
+_nextLog:
+    INC ecx
+    CMP ecx, 8
+    JB _logLoop
+
+    MOV eax, CLR_TITLE
+    CALL SetTextColor
+    MOV dl, 0
+    MOV dh, 23
+    CALL Gotoxy
+    MOV edx, OFFSET barStr
+    CALL WriteString
+    MOVZX eax, current_phase
+    SHR eax, 1
+    IMUL eax, eax, 14
+    LEA edx, [lane_names + eax]
+    CALL WriteString
+    MOV edx, OFFSET barTail
+    CALL WriteString
+
+    MOV eax, CLR_WHT
+    CALL SetTextColor
+    MOV dl, 0
+    MOV dh, 24
+    CALL Gotoxy
+    RET
+display ENDP
+
+initSimulation PROC
+    CALL Randomize
+    CALL Clrscr
+    MOV lights_state, NORTH_GREEN
+    CALL openLog
+    CALL logPhase
+    RET
+initSimulation ENDP
+
+handleKey PROC
+    CMP al, 27
+    JE _esc
+    CMP dx, 70h
+    JNE _chkF2
+    INC input_mode
+    CMP input_mode, 3
+    JB _done
+    MOV input_mode, 0
+    JMP _done
+_chkF2:
+    CMP dx, 71h
+    JNE _chkSpace
+    XOR sig_manual, 1
+    JMP _done
+_chkSpace:
+    CMP al, ' '
+    JNE _chkKeys
+    MOV advance_req, 1
+    JMP _done
+_chkKeys:
+    CMP input_mode, 1
+    JE _done
+    MOV ebx, 1
+    TEST al, 20h
+    JNZ _lc
+    MOV ebx, 5
+_lc:
+    OR al, 20h
+    CMP al, 'n'
+    JNE _kE
+    ADD north_queue, ebx
+    INC manual_inputs
+    JMP _done
+_kE:
+    CMP al, 'e'
+    JNE _kS
+    ADD east_queue, ebx
+    INC manual_inputs
+    JMP _done
+_kS:
+    CMP al, 's'
+    JNE _kW
+    ADD south_queue, ebx
+    INC manual_inputs
+    JMP _done
+_kW:
+    CMP al, 'w'
+    JNE _done
+    ADD west_queue, ebx
+    INC manual_inputs
+_done:
+    XOR eax, eax
+    RET
+_esc:
+    MOV eax, 1
+    RET
+handleKey ENDP
+
+pollInput PROC
+    MOV poll, 10
+_poll:
+    CALL ReadKey
+    JZ _noKey
+    CALL handleKey
+    CMP eax, 1
+    JE _out
+_noKey:
+    MOV eax, 100
+    CALL Delay
+    DEC poll
+    JNZ _poll
+    XOR eax, eax
+_out:
+    RET
+pollInput ENDP
+
+timeStep PROC
+    INC ticks
+    INC phase_elapsed
+    RET
+timeStep ENDP
+
+carFlow PROC
+    MOV eax, ticks
+    XOR edx, edx
+    MOV ebx, SINGLE_CAR_TIME
+    DIV ebx
+    TEST edx, edx
+    JNZ _noDepart
+    CALL processDepartures
+_noDepart:
+    CMP input_mode, 2
+    JE _done
+    MOV eax, ticks
+    XOR edx, edx
+    MOV ebx, 5
+    DIV ebx
+    TEST edx, edx
+    JNZ _done
+    CALL generateInput
+_done:
+    RET
+carFlow ENDP
+
+signalControl PROC
+    CMP sig_manual, 0
+    JNE _manualSig
+    CALL adaptiveTick
+    JMP _sigDone
+_manualSig:
+    TEST current_phase, 1
+    JNZ _sigDone
+    MOV phase_timer, 99
+_sigDone:
+    CMP advance_req, 0
+    JE _noAdv
+    MOV phase_timer, 1
+    MOV advance_req, 0
+_noAdv:
+    CALL updateFSM
+    CALL logPhase
+    RET
+signalControl ENDP
+
+shutdown PROC
+    CALL closeLog
+    CALL Clrscr
+    RET
+shutdown ENDP
+
+runSimulation PROC
+_tick:
+    CALL display
+    CALL pollInput
+    CMP eax, 1
+    JE _quit
+    CALL timeStep
+    CALL carFlow
+    CALL updateMetrics
+    CALL signalControl
+    JMP _tick
+_quit:
+    RET
+runSimulation ENDP
+
+main PROC
+    CALL initSimulation
+    CALL runSimulation
+    CALL shutdown
+    EXIT
+main ENDP
+END main
