@@ -98,10 +98,6 @@ This project is intended for academic and educational purposes as part of the CO
 
 Developed for the COAL Lab project in x86 Assembly.
 
----
-
-If you want, I can also create a more advanced version of this README with:
-
 - a project logo/header banner,
 - installation screenshots style sections,
 - a GitHub badge set,
