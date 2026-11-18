@@ -131,6 +131,7 @@ push ebp
 mov ebp, esp
 push eax
 mov ebx, [ebp + 12]
+Push ebp
 cmp ebx, 0
 je DONE
 test ebx, 1
@@ -179,6 +180,7 @@ dec DWORD PTR [esi]
 inc total_out
 
 DONE:
+pop ebx
 pop eax
 pop ebp
 ret 8
