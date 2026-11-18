@@ -84,6 +84,7 @@ inc DWORD PTR [esi]
 mov edi, OFFSET total_north_cars
 inc DWORD PTR [edi]
 inc total_in
+inc max_north_queue
 jmp to_after
 
 inc_south:
@@ -92,6 +93,7 @@ inc DWORD PTR [esi]
 mov edi, OFFSET total_south_cars
 inc DWORD PTR [edi]
 inc total_in
+inc max_south_queue
 jmp to_after
 
 inc_east:
@@ -100,6 +102,7 @@ inc DWORD PTR [esi]
 mov edi, OFFSET total_east_cars
 inc DWORD PTR [edi]
 inc total_in
+inc max_east_queue
 jmp to_after
 
 inc_west:
@@ -108,6 +111,7 @@ inc DWORD PTR [esi]
 mov edi, OFFSET total_west_cars
 inc DWORD PTR [edi]
 inc total_in
+inc max_west_queue
 jmp to_after
 
 to_after:
