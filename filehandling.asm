@@ -1,8 +1,15 @@
+labelnorth BYTE "North Queue: ", 0
+labelwest BYTE "West Queue: ", 0
+labeleast BYTE "East Queue: ", 0
+labelsouth BYTE "SOUTH Queue ", 0
+labelin BYTE "Total Cars Going in: ", 0
+label out BYTE "Total Cara Going out: ", 0
 labelmax BYTE "Max Queue: ", 0
  
 file PROC
 mov bufferlen, 0
 mov edi, OFFSET buffer
+
 mov esi, OFFSET labelin
 call WriteLabel
 mov eax, total_in
