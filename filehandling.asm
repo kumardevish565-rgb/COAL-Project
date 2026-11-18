@@ -6,10 +6,10 @@ labelin BYTE "Total Cars Going in: ", 0
 labelout BYTE "Total Cara Going out: ", 0
 labelmax BYTE "Max Queue: ", 0
 labelmaxtime BYTE "Time for Maximum: ", 0
-labelnorthmaxtime BYTE "Max North time", 0
-labelsouthmaxtime BYTE "Max South time", 0
-labeleastmaxtime BYTE "Max East time", 0
-labelwestmaxtime BYTE "Max West time", 0
+labelnorthmaxtime BYTE "Max North time ", 0
+labelsouthmaxtime BYTE "Max South time ", 0
+labeleastmaxtime BYTE "Max East time ", 0
+labelwestmaxtime BYTE "Max West time ", 0
  
 file PROC
 mov bufferlen, 0
@@ -17,27 +17,27 @@ mov edi, OFFSET buffer
 
 mov esi, OFFSET labelmaxtime
 call WriteLabel
-mov eax, total_in
+mov eax, time_max_queue
 call WriteNumber
 
 mov esi, OFFSET labelnorthmaxtime
 call WriteLabel
-mov eax, total_in
+mov eax, time_north_max_queue
 call WriteNumber
 
 mov esi, OFFSET labelsouthmaxtime
 call WriteLabel
-mov eax, total_in
+mov eax, time_south_max_queue
 call WriteNumber
 
 mov esi, OFFSET labeleastmaxtime
 call WriteLabel
-mov eax, total_in
+mov eax, time_east_max_queue
 call WriteNumber
 
 mov esi, OFFSET labelwestmaxtime
 call WriteLabel
-mov eax, total_in
+mov eax, time_west_max_queue
 call WriteNumber
 
 mov esi, OFFSET labelin
