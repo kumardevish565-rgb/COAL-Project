@@ -25,22 +25,22 @@ mov edi, OFFSET buffer
 
 mov esi, OFFSET labelmaxnorth
 call WriteLabel
-mov eax, total_north_cars
+mov eax, max_north_queue
 call WriteNumber
 
 mov esi, OFFSET labelmaxwest
 call WriteLabel
-mov eax, total_north_cars
+mov eax, max_west_queue
 call WriteNumber
 
 mov esi, OFFSET labelmaxeast
 call WriteLabel
-mov eax, total_north_cars
+mov eax, max_east_queue
 call WriteNumber
 
 mov esi, OFFSET labelmaxsouth
 call WriteLabel
-mov eax, total_north_cars
+mov eax, max_south_queue
 call WriteNumber
 
 mov esi, OFFSET labeltotalnorth
