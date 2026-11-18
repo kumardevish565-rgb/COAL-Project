@@ -47,22 +47,22 @@ call WriteNumber
 
 mov esi, OFFSET labelnorthmaxtime
 call WriteLabel
-mov eax, time_north_max_queue
+mov eax, time_max_north_queue
 call WriteNumber
 
 mov esi, OFFSET labelsouthmaxtime
 call WriteLabel
-mov eax, time_south_max_queue
+mov eax, time_max_south_queue
 call WriteNumber
 
 mov esi, OFFSET labeleastmaxtime
 call WriteLabel
-mov eax, time_east_max_queue
+mov eax, time_max_east_queue
 call WriteNumber
 
 mov esi, OFFSET labelwestmaxtime
 call WriteLabel
-mov eax, time_west_max_queue
+mov eax, time_max_west_queue
 call WriteNumber
 
 mov esi, OFFSET labelin
