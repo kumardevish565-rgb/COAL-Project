@@ -1,4 +1,4 @@
-filename BYTE "Smart Traffic Grid System" , 0
+filename BYTE "Smart Traffic Grid System.txt" , 0
 buffer BYTE 1024 DUP (0)
 filehandle HANDLE ?
 bufferlen DWORD 0
@@ -128,15 +128,15 @@ mov eax, south_queue
 Call WriteNumber
 
 mov edx, OFFSET filename
-CAll Createoutputfile
+CAll CreateOutputFile
 mov filehandle, eax
 
 mov eax, filehandle
 mov edx, OFFSET buffer
 mov ecx, bufferlen
-Call Writetofile
+Call WriteToFile
 
 mov eax, filehandle
-call Closefile
+call CloseFile
 ret
 file ENDP
