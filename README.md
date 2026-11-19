@@ -98,6 +98,3 @@ This project is intended for academic and educational purposes as part of the CO
 Devish Kumsr
 Abdul Wasay
 Vivek Kumar
-
-
-- or a version tailored specifically for academic submission.
