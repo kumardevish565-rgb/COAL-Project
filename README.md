@@ -95,15 +95,9 @@ This project helps reinforce:
 This project is intended for academic and educational purposes as part of the COAL Lab curriculum.
 
 ## Author
+Devish Kumsr
+Abdul Wasay
+Vivek Kumar
 
-Developed for the COAL Lab project in x86 Assembly.
 
----
-
-If you want, I can also create a more advanced version of this README with:
-
-- a project logo/header banner,
-- installation screenshots style sections,
-- a GitHub badge set,
-- a more detailed workflow diagram,
 - or a version tailored specifically for academic submission.
