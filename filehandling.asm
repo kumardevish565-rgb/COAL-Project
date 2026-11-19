@@ -1,7 +1,7 @@
-filename BYTE "----Smart Traffic Grid System----" , 0
-BUFFER BYTE 1024 DUP (0)
+filename BYTE "Smart Traffic Grid System" , 0
+buffer BYTE 1024 DUP (0)
 filehandle HANDLE ?
-BUFFERLEN DWORD 0
+bufferlen DWORD 0
 labelnorth BYTE "North Queue: ", 0
 labelwest BYTE "West Queue: ", 0
 labeleast BYTE "East Queue: ", 0
