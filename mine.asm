@@ -155,7 +155,7 @@ adaptiveTimer ENDP
 updateFSM PROC USES eax ebx ecx edi
     MOV ecx, phase_timer
     DEC ecx
-    TEST ecx, 0FFFFFFFFh
+    TEST ecx, ecx
     JNZ _out
 
     MOVZX eax, current_phase
@@ -174,7 +174,7 @@ _notReset:
 	JMP _setPhase
 
 _greenLight:
-	TEST eax, 0FFFFFFFFh
+	TEST eax, eax
 	JZ _north
 	CMP eax, 2
 	JE _east
