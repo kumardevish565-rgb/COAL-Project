@@ -1,3 +1,4 @@
+call file // before main end
 filename BYTE "Smart Traffic Grid System.txt" , 0
 buffer BYTE 1024 DUP (0)
 filehandle HANDLE ?
@@ -140,3 +141,56 @@ mov eax, filehandle
 call CloseFile
 ret
 file ENDP
+
+WriteLabel PROC
+push eax
+
+Writeloop:
+mov al, [esi]
+cmp al, 0
+je WriteEnd
+mov [edi], al
+inc esi
+inc esi
+inc bufferlen
+jmp WriteLoop
+
+WriteEnd:
+pop eax
+ret
+WriteLabel ENDP
+
+WriteNumber Proc
+puxh eax
+puxh ebx
+push ecx
+push edx
+mov ebx, 10
+xor ecx, ecx
+
+GetDigits:
+xor edx, edx
+div ebx
+add dl, '0'
+push edx
+inc ecx
+test eax, eax
+jnz GetDigits
+
+SaveDigits:
+pop ebx
+mov [edi], dl
+inc edi
+inc bufferlen
+loop SaveDigits
+mov BYTE PTR [edi], 0Dh
+inc edi
+mov BYTE PTR [edi] , 0Ah
+inc edi
+add bufferlen, 2
+pop edx
+pop ecx
+pop ebx
+pop eax
+ret
+WriteNumber ENDP
