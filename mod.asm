@@ -53,6 +53,8 @@ greater_selected:
 call ReadKey
 jz no_input
 and al, 11011111b
+cmp al, "Q"
+je EndGame
 cmp al, 'N'
 je inc_north
 cmp al, 'W'
@@ -84,7 +86,12 @@ inc DWORD PTR [esi]
 mov edi, OFFSET total_north_cars
 inc DWORD PTR [edi]
 inc total_in
-inc max_north_queue
+mov eax, north_queue
+cmp eax, max_north_queue
+jbe to_after
+mov max_north_queue, eax
+movzx eax, TIMER
+mov time_max_north_queue, eax
 jmp to_after
 
 inc_south:
@@ -93,7 +100,12 @@ inc DWORD PTR [esi]
 mov edi, OFFSET total_south_cars
 inc DWORD PTR [edi]
 inc total_in
-inc max_south_queue
+mov eax, south_queue
+cmp eax, max_south_queue
+jbe to_after
+mov max_south_queue, eax
+movzx eax, TIMER
+mov time_max_south_queue, eax
 jmp to_after
 
 inc_east:
@@ -102,7 +114,14 @@ inc DWORD PTR [esi]
 mov edi, OFFSET total_east_cars
 inc DWORD PTR [edi]
 inc total_in
-inc max_east_queue
+
+mov eax, east_queue
+cmp eax, max_east_queue
+jbe to_after
+mov max_east_queue, eax
+movzx eax, TIMER
+mov time_max_east_queue, eax
+
 jmp to_after
 
 inc_west:
@@ -111,7 +130,14 @@ inc DWORD PTR [esi]
 mov edi, OFFSET total_west_cars
 inc DWORD PTR [edi]
 inc total_in
-inc max_west_queue
+
+mov eax, west_queue
+cmp eax, max_west_queue
+jbe to_after
+mov max_west_queue, eax
+movzx eax, TIMER
+mov time_max_west_queue, eax
+
 jmp to_after
 
 to_after:
@@ -122,10 +148,13 @@ push eax
 
 Call carsdec
 
+inc TIMER
 mov eax, 1000
 Call Delay
 Jmp MainLoop
+EndGame:
 
+call file
 exit
 MAIN ENDP
 
@@ -134,8 +163,8 @@ carsdec PROC
 push ebp
 mov ebp, esp
 push eax
+push ebx
 mov ebx, [ebp + 12]
-Push ebp
 cmp ebx, 0
 je DONE
 test ebx, 1
