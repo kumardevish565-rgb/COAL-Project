@@ -1,6 +1,6 @@
-.586
-.model flat, C
-OPTION CASEMAP:NONE
+.586 ; for using rdtsc instruction
+.model flat, C ; define C calling convention 
+OPTION CASEMAP:NONE ; ensure case-sensitivity 
 
 CreateFileA PROTO STDCALL :DWORD,:DWORD,:DWORD,:DWORD,:DWORD,:DWORD,:DWORD
 WriteFile   PROTO STDCALL :DWORD,:DWORD,:DWORD,:DWORD,:DWORD
@@ -12,7 +12,7 @@ CREATE_ALWAYS         EQU 2
 FILE_ATTRIBUTE_NORMAL EQU 80h
 INVALID_HANDLE_VALUE  EQU -1
 
-PUBLIC InitSim, AddTraffic, StepTick, SaveReport
+PUBLIC AddTraffic, StepTick, SaveReport
 
 PUBLIC lights_state, current_phase, phase_timer
 PUBLIC north_queue, south_queue, east_queue, west_queue
@@ -26,7 +26,8 @@ PUBLIC time_max_north_queue, time_max_south_queue, time_max_east_queue, time_max
 PUBLIC phase_names, state_arr
 
 .data
-NORTH_GREEN  EQU 00000001b
+;the bit set in each mask indicates the current active state
+NORTH_GREEN  EQU 00000001b  
 NORTH_YELLOW EQU 00000010b
 EAST_GREEN   EQU 00000100b
 EAST_YELLOW  EQU 00001000b
@@ -35,36 +36,35 @@ SOUTH_YELLOW EQU 00100000b
 WEST_GREEN   EQU 01000000b
 WEST_YELLOW  EQU 10000000b
 
-FOUR_DIRECTIONS EQU 4 ; maximum number of cars generate automatically
+FOUR_DIRECTIONS EQU 4 ; number of directions
 BASE_GREEN_TIME  EQU 10 ; Minimum Time for green light
 MAX_GREEN_TIME   EQU 120 ; Maximum Time for green light
 BASE_YELLOW_TIME EQU 3 ; Time for yellow light
 SINGLE_CAR_TIME  EQU 2 ; Time for single car to pass
 
-state_arr BYTE NORTH_GREEN, NORTH_YELLOW,
+;Lookup table with even indicies for green light 
+;and odd for yellow light
+;Helps save comparing every mask to decide current and next state
+state_arr BYTE NORTH_GREEN, NORTH_YELLOW, 
                EAST_GREEN, EAST_YELLOW,
                SOUTH_GREEN, SOUTH_YELLOW,
                WEST_GREEN, WEST_YELLOW
 
-lights_state   BYTE 0 ; Current state of traffic lights
+lights_state   BYTE NORTH_GREEN ; Current state of traffic lights
 current_phase  BYTE 0 ; Current phase in finite-state machine (FSM)
 phase_timer    DWORD (BASE_GREEN_TIME + MAX_GREEN_TIME) / 2 ; Timer for current active traffic light
 
+;Queue lengths for each direction
 north_queue    DWORD 0
 south_queue    DWORD 0
 east_queue     DWORD 0
 west_queue     DWORD 0
+
+;metrices to keep track of for filing
 total_in       DWORD 0
 total_out      DWORD 0
 current_cars   DWORD 0
 peak_queue     DWORD 0
-
-ticks          DWORD 0
-north_departs  DWORD 0
-east_departs   DWORD 0
-south_departs  DWORD 0
-west_departs   DWORD 0
-
 total_north_cars     DWORD 0
 total_south_cars     DWORD 0
 total_east_cars      DWORD 0
@@ -79,6 +79,13 @@ time_max_south_queue DWORD 0
 time_max_east_queue  DWORD 0
 time_max_west_queue  DWORD 0
 
+ticks  DWORD 0 ; simualation loop counter(time-stamp)
+prev_val DWORD ? 
+north_departs  DWORD 0
+east_departs   DWORD 0
+south_departs  DWORD 0
+west_departs   DWORD 0
+
 phase_names BYTE "North Green  ",0
             BYTE "North Yellow ",0
             BYTE "East Green   ",0
@@ -87,38 +94,39 @@ phase_names BYTE "North Green  ",0
             BYTE "South Yellow ",0
             BYTE "West Green   ",0
             BYTE "West Yellow  ",0
+;filing labels for formatted output to file
+labelnorth BYTE "North Queue ", 0
+labelwest BYTE "West Queue ", 0
+labeleast  BYTE "East Queue ", 0
+labelsouth BYTE "SOUTH Queue ", 0
+labelin BYTE "Total Cars Going in ", 0
+labelout BYTE "Total Cars Going out ", 0
+labelmax BYTE "Max Queue ", 0
+labelmaxtime BYTE "Time for Maximum ", 0
+labelnorthmaxtime BYTE "Max North time ", 0
+labelsouthmaxtime BYTE "Max South time ", 0
+labeleastmaxtime BYTE "Max East time ", 0
+labelwestmaxtime BYTE "Max West time ", 0
+labeltotalnorth BYTE "Total North Cars ", 0
+labeltotalwest BYTE "Total West Cars ", 0
+labeltotaleast BYTE "Total East Cars ", 0
+labeltotalsouth BYTE "Total South Cars ", 0
+labelmaxnorth BYTE "Max North Cars ", 0
+labelmaxwest BYTE "Max West Cars ", 0
+labelmaxeast BYTE "Max East Cars ", 0
+labelmaxsouth BYTE "Max South Cars ", 0
 
-labelnorth          BYTE "North Queue: ", 0
-labelwest           BYTE "West Queue: ", 0
-labeleast           BYTE "East Queue: ", 0
-labelsouth          BYTE "SOUTH Queue ", 0
-labelin             BYTE "Total Cars Going in: ", 0
-labelout            BYTE "Total Cars Going out: ", 0
-labelmax            BYTE "Max Queue: ", 0
-labelmaxtime        BYTE "Time for Maximum: ", 0
-labelnorthmaxtime   BYTE "Max North time ", 0
-labelsouthmaxtime   BYTE "Max South time ", 0
-labeleastmaxtime    BYTE "Max East time ", 0
-labelwestmaxtime    BYTE "Max West time ", 0
-labeltotalnorth     BYTE "Total North Cars", 0
-labeltotalwest      BYTE "Total West Cars", 0
-labeltotaleast      BYTE "Total East Cars", 0
-labeltotalsouth     BYTE "Total South Cars", 0
-labelmaxnorth       BYTE "Max North Cars:", 0
-labelmaxwest        BYTE "Max West Cars:", 0
-labelmaxeast        BYTE "Max East Cars:", 0
-labelmaxsouth       BYTE "Max South Cars:", 0
+bufferlen DWORD 0
+buffer  BYTE 2000 DUP(0)
+filename BYTE "traffic.txt", 0
+filehandle DWORD 0
 
-bufferlen           DWORD 0
-buffer              BYTE 2000 DUP(0)
-filename            BYTE "traffic.txt", 0
-filehandle          DWORD 0
-
-bytesWritten        DWORD 0
-rng_seed            DWORD 0A5C3E1B7h
+bytesWritten DWORD 0
+rng_set BYTE 0
 
 .code
-
+;uses adpative formuala to return duration of green light in ecx:
+;min(Current_Queue_Len*SINGLE_CAR_TIME+BASE_GREEN_TIME,MAX_GREEN_TIME)
 adaptiveTimer PROC USES eax edx
     MOV eax, [esi]
     PUSH SINGLE_CAR_TIME
@@ -133,30 +141,31 @@ _out:
     MOV ecx, eax
     RET
 adaptiveTimer ENDP
-
+;updates the current state and light timer if it has ended
 updateFSM PROC USES eax ebx ecx edi
     MOV ecx, phase_timer
     DEC ecx
-    TEST ecx, 0FFFFFFFFh
-    JNZ _out
+    TEST ecx, ecx ; check if ecx=0 meaning time has ended
+    JNZ _out      ; if ecx!=0 leave function
 
     MOVZX eax, current_phase
-    INC eax
-    CMP eax, 7
-    JNA _notReset
-    XOR eax, eax
+    INC eax ; transition to next phase in fsm
+    CMP eax, 7 
+    JNA _notReset ;if phase<7 then skip 
+    XOR eax, eax  ;else wrap it back to 0
 
 _notReset:
- 	LEA edi, [state_arr + eax * TYPE state_arr]
-	MOV bl, [edi]
-	MOV lights_state, bl
-	TEST eax, 1
-	JZ _greenLight
-	MOV ecx, BASE_YELLOW_TIME
+ 	LEA edi, [state_arr + eax * TYPE state_arr] ;used to interpret current_phase quickly
+	MOV bl, [edi] ;
+	MOV lights_state, bl ;update current state of lights
+	TEST eax, 1 ;checking for even indices
+	JZ _greenLight ;even=green light
+	MOV ecx, BASE_YELLOW_TIME ;yellow lights have fixed time
 	JMP _setPhase
 
 _greenLight:
-	TEST eax, 0FFFFFFFFh
+;check for direction and point esi to it 
+	TEST eax, eax 
 	JZ _north
 	CMP eax, 2
 	JE _east
@@ -174,12 +183,12 @@ _east:
 _south:
 	MOV esi, OFFSET south_queue
 _setTimer:
-	CALL adaptiveTimer
+	CALL adaptiveTimer ;update timer with queue passed through esi
 _setPhase:
 	MOV current_phase, al
 
 _out:
-	MOV phase_timer, ecx
+	MOV phase_timer, ecx ;move timer from ecx to variable
 	RET
 updateFSM ENDP
 
@@ -515,59 +524,32 @@ to_after:
     ret
 AddWest ENDP
 
-RandomRange PROC USES ebx edx
+RandomRange PROC 
+push ebx
+push edx
+
+cmp rng_set, 0
+jnz _skip
+push eax
+rdtsc 
+mov prev_val, eax
+mov rng_set, 1
+pop eax
+_skip:
     mov ebx, eax
-    mov eax, rng_seed
+    mov eax, prev_val
     mov edx, 1664525
     mul edx
-    add eax, 1013904223
-    mov rng_seed, eax
+    add eax, 13904223
+    mov prev_val, eax
     shr eax, 16
     xor edx, edx
     div ebx
     mov eax, edx
-    ret
+pop edx
+pop ebx
+ret
 RandomRange ENDP
-
-InitSim PROC C
-    mov lights_state, NORTH_GREEN
-    mov current_phase, 0
-    mov phase_timer, (BASE_GREEN_TIME + MAX_GREEN_TIME) / 2
-
-    xor eax, eax
-    mov north_queue, eax
-    mov south_queue, eax
-    mov east_queue, eax
-    mov west_queue, eax
-    mov total_in, eax
-    mov total_out, eax
-    mov current_cars, eax
-    mov peak_queue, eax
-    mov ticks, eax
-    mov north_departs, eax
-    mov east_departs, eax
-    mov south_departs, eax
-    mov west_departs, eax
-    mov total_north_cars, eax
-    mov total_south_cars, eax
-    mov total_east_cars, eax
-    mov total_west_cars, eax
-    mov max_north_queue, eax
-    mov max_south_queue, eax
-    mov max_east_queue, eax
-    mov max_west_queue, eax
-    mov time_max_queue, eax
-    mov time_max_north_queue, eax
-    mov time_max_south_queue, eax
-    mov time_max_east_queue, eax
-    mov time_max_west_queue, eax
-
-    rdtsc
-    xor eax, edx
-    or  eax, 1
-    mov rng_seed, eax
-    ret
-InitSim ENDP
 
 AddTraffic PROC C USES ebx esi edi, lane:DWORD
     mov eax, lane
