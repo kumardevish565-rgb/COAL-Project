@@ -95,6 +95,6 @@ This project helps reinforce:
 This project is intended for academic and educational purposes as part of the COAL Lab curriculum.
 
 ## Author
-Devish Kumsr
+Devish Kumar
 Abdul Wasay
 Vivek Kumar
