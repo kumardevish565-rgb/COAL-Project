@@ -195,7 +195,7 @@ updateFSM ENDP
 WriteLabel PROC ; Copies string into buffer
 push eax
 
-WriteLoop: loop; if theres letter save it loop until end . if not jump to end
+WriteLoop:      ; if theres letter save it and loop until end . if not jump to end
 mov al, [esi]
 cmp al, 0
 je WriteEnd
