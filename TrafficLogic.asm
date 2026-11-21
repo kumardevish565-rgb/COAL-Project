@@ -192,10 +192,10 @@ _out:
 	RET
 updateFSM ENDP
 
-WriteLabel PROC
+WriteLabel PROC ; Copies string into buffer
 push eax
 
-WriteLoop:
+WriteLoop: loop; if theres letter save it loop until end . if not jump to end
 mov al, [esi]
 cmp al, 0
 je WriteEnd
@@ -205,12 +205,12 @@ inc edi
 inc bufferlen
 jmp WriteLoop
 
-WriteEnd:
+WriteEnd: ; ENd of write proc
 pop eax
 ret
 WriteLabel ENDP
 
-WriteNumber Proc
+WriteNumber Proc ; Convets integers in EAX to ASCII characters and saves in buffer
 push eax
 push ebx
 push ecx
@@ -218,7 +218,7 @@ push edx
 mov ebx, 10
 xor ecx, ecx
 
-GetDigits:
+GetDigits: ; Get digits from right to left
 xor edx, edx
 div ebx
 add dl, '0'
@@ -227,7 +227,7 @@ inc ecx
 test eax, eax
 jnz GetDigits
 
-SaveDigits:
+SaveDigits:  ; Loop to pop digits from left to right
 pop edx
 mov [edi], dl
 inc edi
@@ -245,7 +245,7 @@ pop eax
 ret
 WriteNumber ENDP
 
-file PROC
+file PROC          ; File Handling
     mov bufferlen, 0
     mov edi, OFFSET buffer
 
@@ -356,11 +356,11 @@ file PROC
 
     INVOKE WriteFile, filehandle, OFFSET buffer, bufferlen, OFFSET bytesWritten, 0
     INVOKE CloseHandle, filehandle
-_fileDone:
+_fileDone:  ; End of file handling
     ret
 file ENDP
 
-carsdec PROC
+carsdec PROC  ; Dec cars
     push ebp
     mov ebp, esp
     push eax
@@ -382,7 +382,7 @@ carsdec PROC
     jnz subsouth
     jmp DONE
 
-subnorth:
+subnorth:  ; subtracts cars from current north queue
     cmp north_queue, 0
     je DONE
     mov esi, OFFSET north_queue
@@ -391,7 +391,7 @@ subnorth:
     inc total_out
     jmp DONE
 
-subeast:
+subeast:   ; subtracts cars from current east queue
     cmp east_queue, 0
     je DONE
     mov esi, OFFSET east_queue
@@ -400,7 +400,7 @@ subeast:
     inc total_out
     jmp DONE
 
-subwest:
+subwest:   ; subtracts cars from current west queue
     cmp west_queue, 0
     je DONE
     mov esi, OFFSET west_queue
@@ -409,7 +409,7 @@ subwest:
     inc total_out
     jmp DONE
 
-subsouth:
+subsouth:   ; subtracts cars from current south queue
     cmp south_queue, 0
     je DONE
     mov esi, OFFSET south_queue
@@ -417,14 +417,14 @@ subsouth:
     inc south_departs
     inc total_out
 
-DONE:
+DONE:  ; End of cars dec function
     pop ebx
     pop eax
     pop ebp
     ret 8
 carsdec ENDP
 
-AddNorth PROC
+AddNorth PROC  ; Adds a car to north queue
     push esi
     mov esi, OFFSET north_queue
     inc DWORD PTR [esi]
@@ -437,7 +437,7 @@ AddNorth PROC
     mov max_north_queue, eax
     mov eax, ticks
     mov time_max_north_queue, eax
-_chk_max_q_n:
+_chk_max_q_n:   ; updates peak queue if north more than peak queue
     mov eax, north_queue
     cmp eax, peak_queue
     jbe to_after
@@ -449,7 +449,7 @@ to_after:
     ret
 AddNorth ENDP
 
-AddSouth PROC
+AddSouth PROC  ; Adds a car to south queue
     push esi
     mov esi, OFFSET south_queue
     inc DWORD PTR [esi]
@@ -462,7 +462,7 @@ AddSouth PROC
     mov max_south_queue, eax
     mov eax, ticks
     mov time_max_south_queue, eax
-_chk_max_q_s:
+_chk_max_q_s:  ; updates peak queue if south more than peak queue
     mov eax, south_queue
     cmp eax, peak_queue
     jbe to_after
@@ -474,7 +474,7 @@ to_after:
     ret
 AddSouth ENDP
 
-AddEast PROC
+AddEast PROC  ; Adds a car to east queue
     push esi
     mov esi, OFFSET east_queue
     inc DWORD PTR [esi]
@@ -487,7 +487,7 @@ AddEast PROC
     mov max_east_queue, eax
     mov eax, ticks
     mov time_max_east_queue, eax
-_chk_max_q_e:
+_chk_max_q_e:   ; updates peak queue if east more than peak queue
     mov eax, east_queue
     cmp eax, peak_queue
     jbe to_after
@@ -499,7 +499,7 @@ to_after:
     ret
 AddEast ENDP
 
-AddWest PROC
+AddWest PROC  ; Adds a car to west queue
     push esi
     mov esi, OFFSET west_queue
     inc DWORD PTR [esi]
@@ -512,7 +512,7 @@ AddWest PROC
     mov max_west_queue, eax
     mov eax, ticks
     mov time_max_west_queue, eax
-_chk_max_q_w:
+_chk_max_q_w:  ; updates peak queue if west more than peak queue
     mov eax, west_queue
     cmp eax, peak_queue
     jbe to_after
@@ -524,7 +524,7 @@ to_after:
     ret
 AddWest ENDP
 
-RandomRange PROC 
+RandomRange PROC     ; Geneates a reandom integer
 push ebx
 push edx
 
@@ -551,7 +551,7 @@ pop ebx
 ret
 RandomRange ENDP
 
-AddTraffic PROC C USES ebx esi edi, lane:DWORD
+AddTraffic PROC C USES ebx esi edi, lane:DWORD   ; Adds a car 
     mov eax, lane
     cmp eax, 0
     je _addN
@@ -562,22 +562,22 @@ AddTraffic PROC C USES ebx esi edi, lane:DWORD
     cmp eax, 3
     je _addW
     jmp _addDone
-_addN:
+_addN:                        ; adds car to north lane
     call AddNorth
     jmp _addDone
-_addE:
+_addE:                       ; adds car to east lane
     call AddEast
     jmp _addDone
-_addS:
+_addS:                          ; adds car to south lane
     call AddSouth
     jmp _addDone
-_addW:
+_addW:                      ; adds car to west lane
     call AddWest
 _addDone:
     ret
 AddTraffic ENDP
 
-StepTick PROC C USES ebx esi edi
+StepTick PROC C USES ebx esi edi             ; advance simulation by 1 tick
     call updateFSM
     inc ticks
 
@@ -585,37 +585,37 @@ StepTick PROC C USES ebx esi edi
     mov ebx, south_queue
     cmp eax, ebx
     jbe south_greater
-s_check:
+s_check:                 ; compares current max to south queue
     mov ebx, east_queue
     cmp eax, ebx
     jbe east_greater
     jmp e_check
-e_check:
+e_check:         ; compares current max to east queue
     mov ebx, west_queue
     cmp eax, ebx
     jbe west_greater
     jmp n_check
-w_check:
+w_check:        ; compares current max to west queue
     mov current_cars, ebx
     jmp greater_selected
 
-n_check:
+n_check:                 ; compares current max to north queue
     mov current_cars, eax
     jmp greater_selected
 
-west_greater:
+west_greater:             ; west is greater
     mov eax, west_queue
     jmp w_check
 
-south_greater:
+south_greater:            ; south is greater
     mov eax, south_queue
     jmp s_check
 
-east_greater:
+east_greater:              ; east is greater
     mov eax, east_queue
     jmp e_check
 
-greater_selected:
+greater_selected:            ; get random number and inc by the corresponding direction for the value
     mov eax, FOUR_DIRECTIONS
     call RandomRange
     cmp eax, 0
@@ -628,16 +628,16 @@ greater_selected:
     je inc_south
     jmp to_after
 
-inc_north:
+inc_north:          ; inc north queue
     call AddNorth
     jmp to_after
-inc_south:
+inc_south:          ; inc south queue
     call AddSouth
     jmp to_after
-inc_east:
+inc_east:          ; inc east queue
     call AddEast
     jmp to_after
-inc_west:
+inc_west:           ; inc west queue
     call AddWest
 
 to_after:
